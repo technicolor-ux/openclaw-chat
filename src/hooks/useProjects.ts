@@ -6,6 +6,7 @@ import {
   deleteThread,
   listProjects,
   listThreads,
+  onThreadRenamed,
   updateProject,
   type Project,
   type Thread,
@@ -44,6 +45,28 @@ export function useProjects() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Listen for thread:renamed events from backend
+  useEffect(() => {
+    let cleanup: (() => void) | null = null;
+    onThreadRenamed(({ threadId, name }) => {
+      const updateThread = (t: Thread) =>
+        t.id === threadId ? { ...t, name } : t;
+      setStandaloneThreads((prev) => prev.map(updateThread));
+      setProjectThreads((prev) => {
+        const next: Record<string, Thread[]> = {};
+        for (const [pid, threads] of Object.entries(prev)) {
+          next[pid] = threads.map(updateThread);
+        }
+        return next;
+      });
+    }).then((fn) => {
+      cleanup = fn;
+    });
+    return () => {
+      cleanup?.();
+    };
+  }, []);
 
   const addProject = useCallback(
     async (name: string, description?: string, color?: string) => {

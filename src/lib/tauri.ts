@@ -63,6 +63,8 @@ export const listThreads = (projectId?: string) =>
   invoke<Thread[]>("cmd_list_threads", { projectId });
 export const createThread = (name: string, projectId?: string, agentId?: string) =>
   invoke<Thread>("cmd_create_thread", { name, projectId, agentId });
+export const renameThread = (id: string, name: string) =>
+  invoke<void>("cmd_rename_thread", { id, name });
 export const deleteThread = (id: string) => invoke<void>("cmd_delete_thread", { id });
 
 // Chat
@@ -108,6 +110,10 @@ export const getRemoteMode = () => invoke<boolean>("cmd_get_remote_mode");
 // Events
 export const onChatMessage = (cb: (event: MessageEvent) => void) =>
   listen<MessageEvent>("chat:message", (e) => cb(e.payload));
+
+export const onThreadRenamed = (
+  cb: (event: { threadId: string; name: string }) => void
+) => listen("thread:renamed", (e: any) => cb(e.payload));
 
 export const onBrainDumpFollowedUp = (
   cb: (event: {

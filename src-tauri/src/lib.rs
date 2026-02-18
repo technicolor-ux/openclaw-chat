@@ -108,6 +108,22 @@ async fn cmd_create_thread(
 }
 
 #[tauri::command]
+async fn cmd_rename_thread(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    id: String,
+    name: String,
+) -> Result<(), String> {
+    let conn = state.db.lock().unwrap();
+    rename_thread(&conn, &id, &name).map_err(|e| e.to_string())?;
+    let _ = app.emit(
+        "thread:renamed",
+        serde_json::json!({ "threadId": id, "name": name }),
+    );
+    Ok(())
+}
+
+#[tauri::command]
 async fn cmd_delete_thread(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let conn = state.db.lock().unwrap();
     delete_thread(&conn, &id).map_err(|e| e.to_string())
@@ -191,6 +207,34 @@ async fn cmd_send_message(
             message: assistant_msg,
         },
     );
+
+    // Auto-title: if thread name is "New thread", generate a title from the user message
+    let should_title = {
+        let conn = state.db.lock().unwrap();
+        get_thread(&conn, &thread_id)
+            .ok()
+            .flatten()
+            .map(|t| t.name == "New thread")
+            .unwrap_or(false)
+    };
+    if should_title {
+        let tid = thread_id.clone();
+        let msg = message.clone();
+        let app2 = app.clone();
+        let db = Arc::clone(&state.db);
+        tauri::async_runtime::spawn(async move {
+            if let Ok(title) = openclaw::generate_title(&msg).await {
+                {
+                    let conn = db.lock().unwrap();
+                    let _ = rename_thread(&conn, &tid, &title);
+                }
+                let _ = app2.emit(
+                    "thread:renamed",
+                    serde_json::json!({ "threadId": tid, "name": title }),
+                );
+            }
+        });
+    }
 
     Ok(())
 }
@@ -372,6 +416,7 @@ pub fn run() {
             cmd_delete_project,
             cmd_list_threads,
             cmd_create_thread,
+            cmd_rename_thread,
             cmd_delete_thread,
             cmd_load_session,
             cmd_send_message,
@@ -395,6 +440,11 @@ pub fn run() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 proactive::run_proactive_loop(app_handle, None).await;
+            });
+            // Start nightly title refresh loop
+            let app_handle2 = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                proactive::run_title_refresh_loop(app_handle2).await;
             });
             Ok(())
         })

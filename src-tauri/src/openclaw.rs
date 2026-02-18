@@ -203,3 +203,52 @@ pub fn find_openclaw_binary() -> Result<PathBuf> {
 
     Err(anyhow!("openclaw binary not found"))
 }
+
+/// Ask OpenClaw to generate a short thread title from message text.
+pub async fn generate_title(text: &str) -> Result<String> {
+    let prompt = format!(
+        "Summarize this in 3-6 words as a chat thread title (reply with just the title, no quotes): {}",
+        &text[..text.len().min(500)]
+    );
+    let result = send_and_capture("main", &prompt).await?;
+    // Clean up: take first line, strip quotes
+    let title = result
+        .lines()
+        .next()
+        .unwrap_or(&result)
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .to_string();
+    if title.is_empty() {
+        return Err(anyhow!("Empty title generated"));
+    }
+    Ok(title)
+}
+
+/// Generate a title from recent conversation messages.
+pub async fn generate_title_from_messages(messages: &[ChatMessage]) -> Result<String> {
+    let summary: String = messages
+        .iter()
+        .take(5)
+        .map(|m| format!("{}: {}", m.role, &m.content[..m.content.len().min(200)]))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let prompt = format!(
+        "Based on this conversation, generate a concise 3-6 word thread title (reply with just the title): {}",
+        summary
+    );
+    let result = send_and_capture("main", &prompt).await?;
+    let title = result
+        .lines()
+        .next()
+        .unwrap_or(&result)
+        .trim()
+        .trim_matches('"')
+        .trim_matches('\'')
+        .to_string();
+    if title.is_empty() {
+        return Err(anyhow!("Empty title generated"));
+    }
+    Ok(title)
+}

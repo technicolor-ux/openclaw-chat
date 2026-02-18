@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract release notes
+        id: extract_notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          # Extract section from CHANGELOG.md for this version
+          # Find the section starting with [VERSION] and ending before the next [
+          NOTES=$(awk "/## \[${VERSION#v}\]/,/^## \[/{if(/^## \[/ && !/## \[${VERSION#v}\]/) exit; print}" CHANGELOG.md | head -n -1)
+          # Use heredoc to handle multiline content
+          {
+            echo 'RELEASE_NOTES<<EOF'
+            echo "$NOTES"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body: ${{ steps.extract_notes.outputs.RELEASE_NOTES }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

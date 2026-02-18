@@ -1,6 +1,7 @@
-use crate::db::{get_proactive_brain_dumps, open_db, set_brain_dump_followed_up};
+use crate::db::{get_proactive_brain_dumps, get_threads_needing_title_refresh, open_db, rename_thread, set_brain_dump_followed_up};
 use crate::openclaw::{self, ChatMessage};
 use anyhow::Result;
+use chrono::{Local, Timelike};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
@@ -16,6 +17,51 @@ pub async fn run_proactive_loop(app: AppHandle, interval_secs: Option<u64>) {
             eprintln!("[proactive] Error: {}", e);
         }
     }
+}
+
+/// Nightly loop: checks every 60s, runs title refresh once at 23:55.
+pub async fn run_title_refresh_loop(app: AppHandle) {
+    let mut last_run_date: Option<chrono::NaiveDate> = None;
+    loop {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        let now = Local::now();
+        let today = now.date_naive();
+        let hour = now.hour();
+        let minute = now.minute();
+
+        // Run at 23:55, once per day
+        if hour == 23 && minute == 55 && last_run_date != Some(today) {
+            last_run_date = Some(today);
+            if let Err(e) = refresh_stale_titles(&app).await {
+                eprintln!("[title-refresh] Error: {}", e);
+            }
+        }
+    }
+}
+
+async fn refresh_stale_titles(app: &AppHandle) -> Result<()> {
+    let conn = open_db()?;
+    let threads = get_threads_needing_title_refresh(&conn)?;
+
+    for thread in threads {
+        let messages = openclaw::load_session(&thread.agent_id, &thread.session_id)?;
+        if messages.is_empty() {
+            continue;
+        }
+        match openclaw::generate_title_from_messages(&messages).await {
+            Ok(title) => {
+                rename_thread(&conn, &thread.id, &title)?;
+                let _ = app.emit(
+                    "thread:renamed",
+                    serde_json::json!({ "threadId": thread.id, "name": title }),
+                );
+            }
+            Err(e) => {
+                eprintln!("[title-refresh] Failed for thread {}: {}", thread.id, e);
+            }
+        }
+    }
+    Ok(())
 }
 
 async fn process_proactive_items(app: &AppHandle) -> Result<()> {

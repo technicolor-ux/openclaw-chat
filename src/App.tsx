@@ -3,12 +3,11 @@ import { IconSun, IconMoon, IconSettings, IconAdjustmentsHorizontal, IconBrain }
 import Sidebar from "./components/Sidebar";
 import BrainDump from "./components/BrainDump";
 import ChatView from "./components/ChatView";
-import NewThreadModal from "./components/NewThreadModal";
 import NewProjectModal from "./components/NewProjectModal";
 import SettingsPanel from "./components/SettingsPanel";
 import { useTheme } from "./hooks/useTheme";
 import { useProjects } from "./hooks/useProjects";
-import { onBrainDumpFollowedUp } from "./lib/tauri";
+import { onBrainDumpFollowedUp, onThreadRenamed } from "./lib/tauri";
 import type { Thread, Project } from "./lib/tauri";
 
 export default function App() {
@@ -27,8 +26,6 @@ export default function App() {
   } = useProjects();
 
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
-  const [showNewThread, setShowNewThread] = useState(false);
-  const [newThreadProjectId, setNewThreadProjectId] = useState<string | undefined>();
   const [showNewProject, setShowNewProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBrainDump, setShowBrainDump] = useState(false);
@@ -58,6 +55,17 @@ export default function App() {
     document.addEventListener("mouseup", onUp);
   }, [sidebarWidth]);
 
+  // Update activeThread when renamed
+  useEffect(() => {
+    let cleanup: (() => void) | null = null;
+    onThreadRenamed(({ threadId, name }) => {
+      setActiveThread((prev) =>
+        prev && prev.id === threadId ? { ...prev, name } : prev
+      );
+    }).then((fn) => { cleanup = fn; });
+    return () => { cleanup?.(); };
+  }, []);
+
   // Handle proactive brain dump follow-ups creating new threads
   useEffect(() => {
     let cleanup: (() => void) | null = null;
@@ -76,18 +84,10 @@ export default function App() {
     };
   }, [addThread]);
 
-  const handleNewThread = useCallback((projectId?: string) => {
-    setNewThreadProjectId(projectId);
-    setShowNewThread(true);
-  }, []);
-
-  const handleCreateThread = useCallback(
-    async (name: string, projectId?: string) => {
-      const thread = await addThread(name, projectId);
-      setActiveThread(thread);
-    },
-    [addThread]
-  );
+  const handleNewThread = useCallback(async (projectId?: string) => {
+    const thread = await addThread("New thread", projectId);
+    setActiveThread(thread);
+  }, [addThread]);
 
   const handleCreateProject = useCallback(
     async (name: string, description?: string, color?: string) => {
@@ -321,14 +321,6 @@ export default function App() {
       </div>
 
       {/* Modals */}
-      {showNewThread && (
-        <NewThreadModal
-          projects={projects}
-          defaultProjectId={newThreadProjectId}
-          onClose={() => setShowNewThread(false)}
-          onCreate={handleCreateThread}
-        />
-      )}
       {showNewProject && (
         <NewProjectModal
           onClose={() => setShowNewProject(false)}

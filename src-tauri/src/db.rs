@@ -94,6 +94,17 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_brain_dumps_proactive ON brain_dumps(proactive);
         ",
     )?;
+
+    // Migration: add title_updated_at column
+    let has_col: bool = conn
+        .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='threads'")?
+        .query_row([], |row| row.get::<_, String>(0))
+        .map(|sql| sql.contains("title_updated_at"))
+        .unwrap_or(false);
+    if !has_col {
+        conn.execute_batch("ALTER TABLE threads ADD COLUMN title_updated_at INTEGER")?;
+    }
+
     Ok(())
 }
 
@@ -228,6 +239,39 @@ pub fn touch_thread(conn: &Connection, thread_id: &str) -> Result<()> {
         params![now, thread_id],
     )?;
     Ok(())
+}
+
+pub fn rename_thread(conn: &Connection, id: &str, name: &str) -> Result<()> {
+    let now = chrono::Utc::now().timestamp_millis();
+    conn.execute(
+        "UPDATE threads SET name=?1, title_updated_at=?2, updated_at=?2 WHERE id=?3",
+        params![name, now, id],
+    )?;
+    Ok(())
+}
+
+pub fn get_thread(conn: &Connection, id: &str) -> Result<Option<Thread>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, name, session_id, agent_id, created_at, updated_at, last_message_at
+         FROM threads WHERE id=?1",
+    )?;
+    let mut rows = stmt.query_map(params![id], row_to_thread)?;
+    Ok(rows.next().transpose()?)
+}
+
+pub fn get_threads_needing_title_refresh(conn: &Connection) -> Result<Vec<Thread>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, name, session_id, agent_id, created_at, updated_at, last_message_at
+         FROM threads
+         WHERE last_message_at IS NOT NULL
+           AND (title_updated_at IS NULL OR last_message_at > title_updated_at)",
+    )?;
+    let rows = stmt.query_map([], row_to_thread)?;
+    let mut threads = Vec::new();
+    for t in rows {
+        threads.push(t?);
+    }
+    Ok(threads)
 }
 
 pub fn delete_thread(conn: &Connection, id: &str) -> Result<()> {
