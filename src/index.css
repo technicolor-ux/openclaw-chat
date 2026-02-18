@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface: #ffffff;
+  --color-surface-2: #f5f5f5;
+  --color-surface-3: #ebebeb;
+  --color-border: #e0e0e0;
+  --color-text: #1a1a1a;
+  --color-text-2: #6b6b6b;
+  --color-accent: #f97316;
+  --color-accent-hover: #ea6c09;
+  --color-user-bubble: #f97316;
+  --color-ai-bubble: #f5f5f5;
+}
+
+.dark {
+  --color-surface: #1a1a1a;
+  --color-surface-2: #242424;
+  --color-surface-3: #2e2e2e;
+  --color-border: #383838;
+  --color-text: #f0f0f0;
+  --color-text-2: #a0a0a0;
+  --color-accent: #fb923c;
+  --color-accent-hover: #f97316;
+  --color-user-bubble: #f97316;
+  --color-ai-bubble: #2a2a2a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+/* Code block styling */
+pre {
+  margin: 0.75rem 0;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 13px;
+}
+
+code {
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, monospace;
+  font-size: 13px;
+}
+
+/* Markdown prose */
+.prose p { margin: 0.5rem 0; }
+.prose p:first-child { margin-top: 0; }
+.prose p:last-child { margin-bottom: 0; }
+.prose ul, .prose ol { margin: 0.5rem 0; padding-left: 1.5rem; }
+.prose li { margin: 0.25rem 0; }
+.prose h1, .prose h2, .prose h3 { font-weight: 600; margin: 0.75rem 0 0.25rem; }
+.prose h1 { font-size: 1.25rem; }
+.prose h2 { font-size: 1.1rem; }
+.prose h3 { font-size: 1rem; }
+.prose code:not(pre code) {
+  background: var(--color-surface-3);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.prose a { color: var(--color-accent); text-decoration: underline; }
+.prose blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: 0.75rem;
+  color: var(--color-text-2);
+  margin: 0.5rem 0;
+}
+.prose table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+.prose th, .prose td {
+  border: 1px solid var(--color-border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+.prose th { background: var(--color-surface-2); font-weight: 600; }
+
+/* Traffic lights region — matches the header height exactly */
+.traffic-light-spacer {
+  -webkit-app-region: drag;
+  height: 52px;
+  width: 80px;
+  flex-shrink: 0;
+  cursor: default;
+}
+
+/* Any element marked as a drag region should show default cursor */
+[data-tauri-drag-region] {
+  cursor: default;
+  -webkit-app-region: drag;
+  user-select: none;
+}
