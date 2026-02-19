@@ -21,8 +21,17 @@ export default function KanbanCard({ item, projects, onSelect }: Props) {
   const isDescriptionTruncated =
     item.description && (item.description.split("\n").length > 3 || descriptionLines.length < item.description.length);
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Only trigger on actual click, not drag
+    if (!isDragging && e.buttons === 0) {
+      console.log("Card clicked:", item.id); // Debug
+      onSelect(item);
+    }
+  };
+
   const handleMenuClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    console.log("Menu clicked:", item.id); // Debug
     onSelect(item);
   };
 
@@ -31,7 +40,7 @@ export default function KanbanCard({ item, projects, onSelect }: Props) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      onClick={() => onSelect(item)}
+      onMouseUp={handleCardClick}
       style={{
         padding: 12,
         paddingRight: 36, // Extra space for menu button
