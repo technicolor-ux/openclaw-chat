@@ -238,8 +238,6 @@ export default function App() {
               fontWeight: 700,
               fontSize: 15,
               color: "var(--color-text)",
-              // @ts-ignore
-              WebkitAppRegion: "no-drag",
             }}
           >
             OpenClaw Chat
@@ -310,6 +308,10 @@ export default function App() {
             threads={projectThreads[activeProject.id] ?? []}
             onSelectThread={handleSelectThread}
             onNewThread={handleNewThread}
+            onGoToBoard={() => {
+              setSelectedProjectFilters([activeProject.id]);
+              setActiveView("board");
+            }}
           />
         ) : (
           <ChatView

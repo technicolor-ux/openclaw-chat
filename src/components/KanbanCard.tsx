@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { IconDots } from "@tabler/icons-react";
 import { updateKanbanItem, type KanbanItem, type Project } from "../lib/tauri";
 
@@ -16,34 +16,28 @@ export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props
   });
 
   const [showProjectSelector, setShowProjectSelector] = useState(false);
-  const [projectHovered, setProjectHovered] = useState<string | undefined>(undefined);
+  const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
+  const [hovered, setHovered] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top?: number; bottom?: number; left: number }>({ left: 0 });
+  const projectSelectorRef = useRef<HTMLDivElement>(null);
+  const badgeRef = useRef<HTMLDivElement>(null);
 
   const project = projects.find((p) => p.id === item.project_id);
   const sourceLabel = item.source_type === "brain_dump" ? "From dump" : undefined;
 
-  // Clamp description to 3 lines
-  const descriptionLines = item.description ? item.description.split("\n").slice(0, 3).join("\n") : "";
-  const isDescriptionTruncated =
-    item.description && (item.description.split("\n").length > 3 || descriptionLines.length < item.description.length);
-
-  const handleCardClick = (e: React.MouseEvent) => {
-    // Only trigger on actual click, not drag
+  const handleCardMouseUp = (e: React.MouseEvent) => {
+    // Don't open card if clicking within the project selector area
+    if (projectSelectorRef.current?.contains(e.target as Node)) {
+      return;
+    }
     if (!isDragging && e.buttons === 0) {
-      console.log("Card clicked:", item.id); // Debug
       onSelect(item);
     }
   };
 
-  const handleMenuClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    console.log("Menu clicked:", item.id); // Debug
-    onSelect(item);
-  };
-
   const handleProjectChange = async (newProjectId: string | undefined) => {
     try {
-      await updateKanbanItem(item.id, undefined, undefined, undefined, undefined, undefined);
-      // Update the item with new project_id
+      await updateKanbanItem(item.id, undefined, undefined, undefined, undefined, undefined, newProjectId);
       const updatedItem = { ...item, project_id: newProjectId };
       onUpdate?.(updatedItem);
       setShowProjectSelector(false);
@@ -57,13 +51,17 @@ export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      onMouseUp={handleCardClick}
+      onMouseUp={handleCardMouseUp}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         padding: 12,
-        paddingRight: 36, // Extra space for menu button
+        paddingRight: 36,
         borderRadius: 8,
-        background: "var(--color-surface)",
+        background: hovered ? "var(--color-surface-3)" : "var(--color-surface)",
         border: "1px solid var(--color-border)",
+        borderLeft: project?.color ? `3px solid ${project.color}` : "1px solid var(--color-border)",
+        boxShadow: hovered ? "0 2px 8px rgba(0, 0, 0, 0.1)" : "none",
         cursor: isDragging ? "grabbing" : "pointer",
         opacity: isDragging ? 0.5 : 1,
         transition: "all 0.2s",
@@ -73,18 +71,14 @@ export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props
         display: "flex",
         flexDirection: "column",
       }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "var(--color-surface-3)";
-        e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.1)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "var(--color-surface)";
-        e.currentTarget.style.boxShadow = "none";
-      }}
     >
-      {/* Menu button - top right */}
-      <button
-        onClick={handleMenuClick}
+      {/* Menu button (⋯) - top right */}
+      <div
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => {
+          e.stopPropagation();
+          onSelect(item);
+        }}
         style={{
           position: "absolute",
           top: 8,
@@ -98,45 +92,19 @@ export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props
           alignItems: "center",
           justifyContent: "center",
           borderRadius: 4,
-          transition: "all 0.15s",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--color-surface-2)";
-          e.currentTarget.style.color = "var(--color-text)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-          e.currentTarget.style.color = "var(--color-text-2)";
         }}
         title="Open card details"
       >
         <IconDots size={16} />
-      </button>
+      </div>
 
-      {/* Project color dot */}
-      {project?.color && (
-        <div
-          style={{
-            position: "absolute",
-            top: 12,
-            left: 12,
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            background: project.color,
-            flexShrink: 0,
-          }}
-        />
-      )}
-
-      {/* Title - with wrapping, max 3 lines */}
+      {/* Title - max 3 lines */}
       <div
         style={{
           fontWeight: 600,
           fontSize: 13,
           color: "var(--color-text)",
           marginBottom: 8,
-          marginLeft: project?.color ? 16 : 0,
           lineHeight: 1.3,
           overflow: "hidden",
           display: "-webkit-box",
@@ -147,8 +115,8 @@ export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props
         {item.title}
       </div>
 
-      {/* Description preview - max 3 lines with ellipsis */}
-      {descriptionLines && (
+      {/* Description preview - max 3 lines */}
+      {item.description && (
         <div
           style={{
             fontSize: 12,
@@ -161,117 +129,52 @@ export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props
             WebkitBoxOrient: "vertical",
           } as any}
         >
-          {descriptionLines}
-          {isDescriptionTruncated && " …"}
+          {item.description}
         </div>
       )}
 
-      {/* Badges at bottom */}
-      <div style={{ display: "flex", gap: 4, marginTop: "auto", flexWrap: "wrap", position: "relative" }}>
-        {/* Project badge - clickable to change project */}
-        {(project || !item.project_id) && (
-          <div style={{ position: "relative" }}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowProjectSelector(!showProjectSelector);
-              }}
-              style={{
-                fontSize: 10,
-                background: "var(--color-surface-2)",
-                color: "var(--color-text-2)",
-                border: "none",
-                borderRadius: 4,
-                padding: "3px 6px",
-                whiteSpace: "nowrap",
-                cursor: "pointer",
-                transition: "all 0.15s",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--color-surface-3)";
-                e.currentTarget.style.color = "var(--color-text)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "var(--color-surface-2)";
-                e.currentTarget.style.color = "var(--color-text-2)";
-              }}
-              title="Click to change project"
-            >
-              {project ? project.name : "No project"}
-            </button>
+      {/* Badges */}
+      <div style={{ display: "flex", gap: 4, marginTop: "auto", flexWrap: "wrap" }}>
+        {/* Project badge — clickable to reassign */}
+        <div
+          ref={projectSelectorRef}
+          onPointerDown={(e) => e.stopPropagation()}
+          style={{ position: "relative" }}
+        >
+          <div
+            ref={badgeRef}
+            onClick={() => {
+              if (!showProjectSelector && badgeRef.current) {
+                const rect = badgeRef.current.getBoundingClientRect();
+                const spaceBelow = window.innerHeight - rect.bottom;
+                const spaceAbove = rect.top;
+                if (spaceBelow >= spaceAbove) {
+                  setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+                } else {
+                  setDropdownPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left });
+                }
+              }
+              setShowProjectSelector((v) => !v);
+            }}
+            style={{
+              fontSize: 10,
+              background: "var(--color-surface-2)",
+              color: "var(--color-text-2)",
+              borderRadius: 4,
+              padding: "3px 6px",
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+              userSelect: "none",
+            }}
+            title="Click to change project"
+          >
+            {project ? project.name : "No project"}
+          </div>
 
-            {/* Project selector dropdown */}
-            {showProjectSelector && (
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: "100%",
-                  left: 0,
-                  marginBottom: 4,
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 6,
-                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-                  zIndex: 100,
-                  minWidth: 140,
-                  maxHeight: 200,
-                  overflowY: "auto",
-                }}
-              >
-                {/* No project option */}
-                <div
-                  onClick={() => handleProjectChange(undefined)}
-                  onMouseEnter={() => setProjectHovered(undefined)}
-                  style={{
-                    padding: "6px 10px",
-                    fontSize: 10,
-                    color: projectHovered === undefined ? "#fff" : "var(--color-text)",
-                    background: projectHovered === undefined ? "var(--color-accent)" : "transparent",
-                    cursor: "pointer",
-                    transition: "all 0.1s",
-                    borderBottom: "1px solid var(--color-border)",
-                  }}
-                >
-                  No project
-                </div>
-                {/* Project options */}
-                {projects.map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => handleProjectChange(p.id)}
-                    onMouseEnter={() => setProjectHovered(p.id)}
-                    onMouseLeave={() => setProjectHovered(undefined)}
-                    style={{
-                      padding: "6px 10px",
-                      fontSize: 10,
-                      color: projectHovered === p.id ? "#fff" : "var(--color-text)",
-                      background: projectHovered === p.id ? "var(--color-accent)" : "transparent",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                      transition: "all 0.1s",
-                    }}
-                  >
-                    {p.color && (
-                      <div
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: "50%",
-                          background: p.color,
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
-                    {p.name}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Backdrop to close dropdown */}
-            {showProjectSelector && (
+          {/* Dropdown */}
+          {showProjectSelector && (
+            <>
+              {/* Backdrop */}
               <div
                 style={{
                   position: "fixed",
@@ -283,9 +186,73 @@ export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props
                 }}
                 onClick={() => setShowProjectSelector(false)}
               />
-            )}
-          </div>
-        )}
+              {/* Menu */}
+              <div
+                style={{
+                  position: "fixed",
+                  ...(dropdownPos.top != null ? { top: dropdownPos.top } : {}),
+                  ...(dropdownPos.bottom != null ? { bottom: dropdownPos.bottom } : {}),
+                  left: dropdownPos.left,
+                  background: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 6,
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                  zIndex: 100,
+                  minWidth: 140,
+                  maxHeight: 200,
+                  overflowY: "auto",
+                }}
+              >
+                <div
+                  onClick={() => handleProjectChange(undefined)}
+                  onMouseEnter={() => setHoveredProjectId("__none__")}
+                  onMouseLeave={() => setHoveredProjectId(null)}
+                  style={{
+                    padding: "6px 10px",
+                    fontSize: 11,
+                    color: hoveredProjectId === "__none__" ? "#fff" : "var(--color-text-2)",
+                    background: hoveredProjectId === "__none__" ? "var(--color-accent)" : "transparent",
+                    cursor: "pointer",
+                    borderBottom: "1px solid var(--color-border)",
+                  }}
+                >
+                  No project
+                </div>
+                {projects.map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleProjectChange(p.id)}
+                    onMouseEnter={() => setHoveredProjectId(p.id)}
+                    onMouseLeave={() => setHoveredProjectId(null)}
+                    style={{
+                      padding: "6px 10px",
+                      fontSize: 11,
+                      color: hoveredProjectId === p.id ? "#fff" : "var(--color-text)",
+                      background: hoveredProjectId === p.id ? "var(--color-accent)" : "transparent",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    {p.color && (
+                      <div
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: p.color,
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                    {p.name}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
 
         {sourceLabel && (
           <span

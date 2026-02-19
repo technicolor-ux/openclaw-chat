@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IconMessage, IconPlus, IconFolder } from "@tabler/icons-react";
+import { IconMessage, IconPlus, IconFolder, IconLayoutKanban } from "@tabler/icons-react";
 import type { Project, Thread } from "../lib/tauri";
 
 interface Props {
@@ -7,10 +7,12 @@ interface Props {
   threads: Thread[];
   onSelectThread: (thread: Thread) => void;
   onNewThread: (projectId: string) => void;
+  onGoToBoard: () => void;
 }
 
-export default function ProjectView({ project, threads, onSelectThread, onNewThread }: Props) {
+export default function ProjectView({ project, threads, onSelectThread, onNewThread, onGoToBoard }: Props) {
   const [hoveredThread, setHoveredThread] = useState<string | null>(null);
+  const [boardBtnHovered, setBoardBtnHovered] = useState(false);
 
   return (
     <div
@@ -24,26 +26,52 @@ export default function ProjectView({ project, threads, onSelectThread, onNewThr
       }}
     >
       {/* Project header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-        <span
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span
+            style={{
+              width: 14,
+              height: 14,
+              borderRadius: "50%",
+              background: project.color ?? "#7c3aed",
+              flexShrink: 0,
+            }}
+          />
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: "var(--color-text)",
+              margin: 0,
+            }}
+          >
+            {project.name}
+          </h1>
+        </div>
+        <button
+          onClick={onGoToBoard}
+          onMouseEnter={() => setBoardBtnHovered(true)}
+          onMouseLeave={() => setBoardBtnHovered(false)}
+          title="View project in board"
           style={{
-            width: 14,
-            height: 14,
-            borderRadius: "50%",
-            background: project.color ?? "#7c3aed",
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            padding: "5px 10px",
+            borderRadius: 7,
+            border: "1px solid var(--color-border)",
+            background: boardBtnHovered ? "var(--color-surface-3)" : "var(--color-surface-2)",
+            color: "var(--color-text-2)",
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: "pointer",
             flexShrink: 0,
-          }}
-        />
-        <h1
-          style={{
-            fontSize: 22,
-            fontWeight: 700,
-            color: "var(--color-text)",
-            margin: 0,
+            transition: "background 0.15s",
           }}
         >
-          {project.name}
-        </h1>
+          <IconLayoutKanban size={13} />
+          Board
+        </button>
       </div>
 
       {/* Description */}
@@ -90,7 +118,7 @@ export default function ProjectView({ project, threads, onSelectThread, onNewThr
         >
           Threads
         </span>
-        <button
+        {threads.length > 0 && <button
           onClick={() => onNewThread(project.id)}
           style={{
             display: "flex",
@@ -108,7 +136,7 @@ export default function ProjectView({ project, threads, onSelectThread, onNewThr
         >
           <IconPlus size={14} />
           New Thread
-        </button>
+        </button>}
       </div>
 
       {/* Thread list */}
