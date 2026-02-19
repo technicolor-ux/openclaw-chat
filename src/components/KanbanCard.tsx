@@ -1,17 +1,22 @@
 import { useDraggable } from "@dnd-kit/core";
+import { useState } from "react";
 import { IconDots } from "@tabler/icons-react";
-import { type KanbanItem, type Project } from "../lib/tauri";
+import { updateKanbanItem, type KanbanItem, type Project } from "../lib/tauri";
 
 interface Props {
   item: KanbanItem;
   projects: Project[];
   onSelect: (card: KanbanItem) => void;
+  onUpdate?: (card: KanbanItem) => void;
 }
 
-export default function KanbanCard({ item, projects, onSelect }: Props) {
+export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: item.id,
   });
+
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [projectHovered, setProjectHovered] = useState<string | undefined>(undefined);
 
   const project = projects.find((p) => p.id === item.project_id);
   const sourceLabel = item.source_type === "brain_dump" ? "From dump" : undefined;
@@ -33,6 +38,18 @@ export default function KanbanCard({ item, projects, onSelect }: Props) {
     e.stopPropagation();
     console.log("Menu clicked:", item.id); // Debug
     onSelect(item);
+  };
+
+  const handleProjectChange = async (newProjectId: string | undefined) => {
+    try {
+      await updateKanbanItem(item.id, undefined, undefined, undefined, undefined, undefined);
+      // Update the item with new project_id
+      const updatedItem = { ...item, project_id: newProjectId };
+      onUpdate?.(updatedItem);
+      setShowProjectSelector(false);
+    } catch (err) {
+      console.error("Failed to change project:", err);
+    }
   };
 
   return (
@@ -150,21 +167,126 @@ export default function KanbanCard({ item, projects, onSelect }: Props) {
       )}
 
       {/* Badges at bottom */}
-      <div style={{ display: "flex", gap: 4, marginTop: "auto", flexWrap: "wrap" }}>
-        {project && (
-          <span
-            style={{
-              fontSize: 10,
-              background: "var(--color-surface-2)",
-              color: "var(--color-text-2)",
-              borderRadius: 4,
-              padding: "3px 6px",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {project.name}
-          </span>
+      <div style={{ display: "flex", gap: 4, marginTop: "auto", flexWrap: "wrap", position: "relative" }}>
+        {/* Project badge - clickable to change project */}
+        {(project || !item.project_id) && (
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowProjectSelector(!showProjectSelector);
+              }}
+              style={{
+                fontSize: 10,
+                background: "var(--color-surface-2)",
+                color: "var(--color-text-2)",
+                border: "none",
+                borderRadius: 4,
+                padding: "3px 6px",
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--color-surface-3)";
+                e.currentTarget.style.color = "var(--color-text)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "var(--color-surface-2)";
+                e.currentTarget.style.color = "var(--color-text-2)";
+              }}
+              title="Click to change project"
+            >
+              {project ? project.name : "No project"}
+            </button>
+
+            {/* Project selector dropdown */}
+            {showProjectSelector && (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: "100%",
+                  left: 0,
+                  marginBottom: 4,
+                  background: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 6,
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+                  zIndex: 100,
+                  minWidth: 140,
+                  maxHeight: 200,
+                  overflowY: "auto",
+                }}
+              >
+                {/* No project option */}
+                <div
+                  onClick={() => handleProjectChange(undefined)}
+                  onMouseEnter={() => setProjectHovered(undefined)}
+                  style={{
+                    padding: "6px 10px",
+                    fontSize: 10,
+                    color: projectHovered === undefined ? "#fff" : "var(--color-text)",
+                    background: projectHovered === undefined ? "var(--color-accent)" : "transparent",
+                    cursor: "pointer",
+                    transition: "all 0.1s",
+                    borderBottom: "1px solid var(--color-border)",
+                  }}
+                >
+                  No project
+                </div>
+                {/* Project options */}
+                {projects.map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => handleProjectChange(p.id)}
+                    onMouseEnter={() => setProjectHovered(p.id)}
+                    onMouseLeave={() => setProjectHovered(undefined)}
+                    style={{
+                      padding: "6px 10px",
+                      fontSize: 10,
+                      color: projectHovered === p.id ? "#fff" : "var(--color-text)",
+                      background: projectHovered === p.id ? "var(--color-accent)" : "transparent",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      transition: "all 0.1s",
+                    }}
+                  >
+                    {p.color && (
+                      <div
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background: p.color,
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                    {p.name}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Backdrop to close dropdown */}
+            {showProjectSelector && (
+              <div
+                style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 99,
+                }}
+                onClick={() => setShowProjectSelector(false)}
+              />
+            )}
+          </div>
         )}
+
         {sourceLabel && (
           <span
             style={{

@@ -11,6 +11,7 @@ interface Props {
   projects: Project[];
   onSelectCard: (card: KanbanItem) => void;
   onRefresh: () => void;
+  onCardUpdate?: (card: KanbanItem) => void;
 }
 
 export default function KanbanColumn({
@@ -20,6 +21,7 @@ export default function KanbanColumn({
   projects,
   onSelectCard,
   onRefresh,
+  onCardUpdate,
 }: Props) {
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -212,6 +214,7 @@ export default function KanbanColumn({
               item={item}
               projects={projects}
               onSelect={onSelectCard}
+              onUpdate={onCardUpdate}
             />
           ))
         )}

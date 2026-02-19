@@ -107,6 +107,11 @@ export default function KanbanBoard({ projectFilters, projects, onOpenThread }: 
               projects={projects}
               onSelectCard={setSelectedCard}
               onRefresh={refresh}
+              onCardUpdate={(updatedCard) => {
+                setItems((prev) =>
+                  prev.map((i) => (i.id === updatedCard.id ? updatedCard : i))
+                );
+              }}
             />
           ))}
         </div>
