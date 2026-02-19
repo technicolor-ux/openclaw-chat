@@ -3,11 +3,12 @@ import { IconSun, IconMoon, IconSettings, IconAdjustmentsHorizontal, IconBrain }
 import Sidebar from "./components/Sidebar";
 import BrainDump from "./components/BrainDump";
 import ChatView from "./components/ChatView";
+import ProjectView from "./components/ProjectView";
 import NewProjectModal from "./components/NewProjectModal";
 import SettingsPanel from "./components/SettingsPanel";
 import { useTheme } from "./hooks/useTheme";
 import { useProjects } from "./hooks/useProjects";
-import { onBrainDumpFollowedUp, onThreadRenamed } from "./lib/tauri";
+import { onBrainDumpFollowedUp, onThreadRenamed, syncObsidianVault } from "./lib/tauri";
 import type { Thread, Project } from "./lib/tauri";
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
     projects,
     standaloneThreads,
     projectThreads,
+    refresh,
     addProject,
     removeProject,
     addThread,
@@ -26,6 +28,7 @@ export default function App() {
   } = useProjects();
 
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
+  const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBrainDump, setShowBrainDump] = useState(false);
@@ -84,6 +87,24 @@ export default function App() {
     };
   }, [addThread]);
 
+  // Startup: sync Obsidian vault then refresh project list
+  useEffect(() => {
+    syncObsidianVault().then(refresh).catch(() => {});
+  }, [refresh]);
+
+  const handleSelectProject = useCallback((project: Project) => {
+    setActiveProject(project);
+    setActiveThread(null);
+  }, []);
+
+  const handleSelectThread = useCallback((thread: Thread) => {
+    setActiveThread(thread);
+    // Keep activeProject if thread belongs to it, otherwise clear
+    setActiveProject((prev) =>
+      prev && thread.project_id === prev.id ? prev : null
+    );
+  }, []);
+
   const handleNewThread = useCallback(async (projectId?: string) => {
     const thread = await addThread("New thread", projectId);
     setActiveThread(thread);
@@ -112,8 +133,11 @@ export default function App() {
       if (activeThread?.project_id === project.id) {
         setActiveThread(null);
       }
+      if (activeProject?.id === project.id) {
+        setActiveProject(null);
+      }
     },
-    [removeProject, activeThread]
+    [removeProject, activeThread, activeProject]
   );
 
   const ThemeIcon =
@@ -144,9 +168,10 @@ export default function App() {
           width={sidebarWidth}
           projects={projects}
           standaloneThreads={standaloneThreads}
-          projectThreads={projectThreads}
           activeThread={activeThread}
-          onSelectThread={setActiveThread}
+          activeProject={activeProject}
+          onSelectThread={handleSelectThread}
+          onSelectProject={handleSelectProject}
           onNewThread={handleNewThread}
           onNewProject={() => setShowNewProject(true)}
           onDeleteThread={handleDeleteThread}
@@ -260,12 +285,21 @@ export default function App() {
           </div>
         </div>
 
-        {/* Chat */}
-        <ChatView
-          thread={activeThread}
-          isDark={isDark}
-          onSent={touchThread}
-        />
+        {/* Main content */}
+        {activeProject && !activeThread ? (
+          <ProjectView
+            project={activeProject}
+            threads={projectThreads[activeProject.id] ?? []}
+            onSelectThread={handleSelectThread}
+            onNewThread={handleNewThread}
+          />
+        ) : (
+          <ChatView
+            thread={activeThread}
+            isDark={isDark}
+            onSent={touchThread}
+          />
+        )}
       </div>
 
       {/* Brain Dump right panel */}
@@ -312,7 +346,7 @@ export default function App() {
             projects={projects}
             onCreateThread={addThread}
             onSelectThread={(thread) => {
-              setActiveThread(thread);
+              handleSelectThread(thread);
               setShowBrainDump(false);
             }}
             onOpenCountChange={setBrainDumpOpenCount}
@@ -332,6 +366,7 @@ export default function App() {
           onClose={() => setShowSettings(false)}
           themeMode={mode}
           onThemeChange={setMode}
+          onProjectsChanged={refresh}
         />
       )}
     </div>

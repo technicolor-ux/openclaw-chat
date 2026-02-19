@@ -6,7 +6,11 @@ import {
   getRemoteMode,
   setRemoteMode,
   testSsh,
+  getSetting,
+  setSetting,
+  syncObsidianVault,
   type SshConfig,
+  type SyncResult,
 } from "../lib/tauri";
 import type { ThemeMode } from "../hooks/useTheme";
 
@@ -14,9 +18,10 @@ interface Props {
   onClose: () => void;
   themeMode: ThemeMode;
   onThemeChange: (mode: ThemeMode) => void;
+  onProjectsChanged?: () => void;
 }
 
-export default function SettingsPanel({ onClose, themeMode, onThemeChange }: Props) {
+export default function SettingsPanel({ onClose, themeMode, onThemeChange, onProjectsChanged }: Props) {
   const [config, setConfig] = useState<SshConfig>({
     host: "mac-mini.local",
     port: 22,
@@ -28,10 +33,16 @@ export default function SettingsPanel({ onClose, themeMode, onThemeChange }: Pro
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Obsidian vault state
+  const [vaultPath, setVaultPath] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+
   useEffect(() => {
-    Promise.all([getSshConfig(), getRemoteMode()]).then(([cfg, rm]) => {
+    Promise.all([getSshConfig(), getRemoteMode(), getSetting("obsidian_vault_path")]).then(([cfg, rm, vp]) => {
       setConfig(cfg);
       setRemote(rm);
+      if (vp) setVaultPath(vp);
     }).catch(() => {});
   }, []);
 
@@ -54,6 +65,7 @@ export default function SettingsPanel({ onClose, themeMode, onThemeChange }: Pro
     try {
       await configureSsh(config);
       await setRemoteMode(remote);
+      if (vaultPath) await setSetting("obsidian_vault_path", vaultPath);
     } catch (err) {
       console.error(err);
     } finally {
@@ -130,6 +142,70 @@ export default function SettingsPanel({ onClose, themeMode, onThemeChange }: Pro
                 {m}
               </button>
             ))}
+          </div>
+        </section>
+
+        {/* Obsidian Vault */}
+        <section style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+            Obsidian Vault
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <Field
+              label="Vault Path"
+              value={vaultPath}
+              onChange={setVaultPath}
+              placeholder="/Users/you/Documents/My Vault"
+            />
+
+            {syncResult && (
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  background: syncResult.errors.length > 0 ? "#fee2e2" : "#d1fae5",
+                  color: syncResult.errors.length > 0 ? "#991b1b" : "#065f46",
+                  fontSize: 13,
+                }}
+              >
+                Synced: {syncResult.created} created, {syncResult.updated} updated, {syncResult.skipped} skipped
+                {syncResult.errors.length > 0 && ` (${syncResult.errors.length} errors)`}
+              </div>
+            )}
+
+            <button
+              onClick={async () => {
+                setSyncing(true);
+                setSyncResult(null);
+                try {
+                  if (vaultPath) await setSetting("obsidian_vault_path", vaultPath);
+                  const result = await syncObsidianVault();
+                  setSyncResult(result);
+                  if (result.created > 0 || result.updated > 0) onProjectsChanged?.();
+                } catch (err: any) {
+                  setSyncResult({ created: 0, updated: 0, skipped: 0, errors: [String(err)] });
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+              disabled={syncing || !vaultPath}
+              style={{
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: "1px solid var(--color-border)",
+                background: "var(--color-surface-2)",
+                color: "var(--color-text)",
+                fontSize: 14,
+                cursor: syncing || !vaultPath ? "default" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                alignSelf: "flex-start",
+              }}
+            >
+              {syncing && <IconLoader2 size={14} className="animate-spin" />}
+              {syncing ? "Syncing…" : "Sync Now"}
+            </button>
           </div>
         </section>
 

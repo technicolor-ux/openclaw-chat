@@ -2,8 +2,6 @@ import { useState } from "react";
 import {
   IconPlus,
   IconMessage,
-  IconChevronDown,
-  IconChevronRight,
   IconTrash,
 } from "@tabler/icons-react";
 import type { Project, Thread } from "../lib/tauri";
@@ -12,9 +10,10 @@ interface Props {
   width: number;
   projects: Project[];
   standaloneThreads: Thread[];
-  projectThreads: Record<string, Thread[]>;
   activeThread: Thread | null;
+  activeProject: Project | null;
   onSelectThread: (thread: Thread) => void;
+  onSelectProject: (project: Project) => void;
   onNewThread: (projectId?: string) => void;
   onNewProject: () => void;
   onDeleteThread: (thread: Thread) => void;
@@ -25,26 +24,17 @@ export default function Sidebar({
   width,
   projects,
   standaloneThreads,
-  projectThreads,
   activeThread,
+  activeProject,
   onSelectThread,
+  onSelectProject,
   onNewThread,
   onNewProject,
   onDeleteThread,
   onDeleteProject,
 }: Props) {
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [hoveredThread, setHoveredThread] = useState<string | null>(null);
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
-
-  const toggleProject = (id: string) => {
-    setCollapsedProjects((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   return (
     <div
@@ -93,117 +83,88 @@ export default function Sidebar({
       />
 
       <div style={{ flex: 1 }}>
-        {projects.map((project) => {
-          const threads = projectThreads[project.id] ?? [];
-          const collapsed = collapsedProjects.has(project.id);
-
-          return (
-            <div key={project.id}>
-              {/* Project row */}
-              <div
-                style={{ position: "relative" }}
-                onMouseEnter={() => setHoveredProject(project.id)}
-                onMouseLeave={() => setHoveredProject(null)}
+        {projects.map((project) => (
+          <div key={project.id}>
+            {/* Project row */}
+            <div
+              style={{ position: "relative" }}
+              onMouseEnter={() => setHoveredProject(project.id)}
+              onMouseLeave={() => setHoveredProject(null)}
+            >
+              <button
+                onClick={() => onSelectProject(project)}
+                style={{
+                  width: "calc(100% - 8px)",
+                  padding: "5px 12px 5px 10px",
+                  background: activeProject?.id === project.id
+                    ? "var(--color-accent)"
+                    : hoveredProject === project.id
+                    ? "var(--color-surface-3)"
+                    : "none",
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  color: activeProject?.id === project.id ? "#fff" : "var(--color-text)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  textAlign: "left",
+                  borderRadius: 6,
+                  margin: "1px 4px",
+                }}
               >
-                <button
-                  onClick={() => toggleProject(project.id)}
+                <span
                   style={{
-                    width: "100%",
-                    padding: "5px 12px 5px 10px",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    color: "var(--color-text)",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    textAlign: "left",
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: project.color ?? "#7c3aed",
+                    flexShrink: 0,
+                  }}
+                />
+                <span
+                  style={{
+                    flex: 1,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {collapsed ? <IconChevronRight size={13} /> : <IconChevronDown size={13} />}
-                  <span
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      background: project.color ?? "#7c3aed",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span
-                    style={{
-                      flex: 1,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {project.name}
-                  </span>
-                </button>
+                  {project.name}
+                </span>
+              </button>
 
-                {/* Project actions */}
-                {hoveredProject === project.id && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      right: 6,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      display: "flex",
-                      gap: 2,
-                    }}
+              {/* Project actions */}
+              {hoveredProject === project.id && (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 6,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    display: "flex",
+                    gap: 2,
+                  }}
+                >
+                  <IconButton
+                    onClick={() => onNewThread(project.id)}
+                    title="New thread in project"
                   >
-                    <IconButton
-                      onClick={() => onNewThread(project.id)}
-                      title="New thread in project"
-                    >
-                      <IconPlus size={13} />
-                    </IconButton>
-                    <IconButton
-                      onClick={() => onDeleteProject(project)}
-                      title="Delete project"
-                      danger
-                    >
-                      <IconTrash size={13} />
-                    </IconButton>
-                  </div>
-                )}
-              </div>
-
-              {/* Project threads */}
-              {!collapsed && (
-                <div style={{ paddingLeft: 20 }}>
-                  {threads.map((thread) => (
-                    <ThreadRow
-                      key={thread.id}
-                      thread={thread}
-                      active={activeThread?.id === thread.id}
-                      hovered={hoveredThread === thread.id}
-                      onSelect={() => onSelectThread(thread)}
-                      onDelete={() => onDeleteThread(thread)}
-                      onMouseEnter={() => setHoveredThread(thread.id)}
-                      onMouseLeave={() => setHoveredThread(null)}
-                    />
-                  ))}
-                  {threads.length === 0 && (
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "var(--color-text-2)",
-                        padding: "4px 10px 6px",
-                      }}
-                    >
-                      No threads yet.
-                    </div>
-                  )}
+                    <IconPlus size={13} />
+                  </IconButton>
+                  <IconButton
+                    onClick={() => onDeleteProject(project)}
+                    title="Delete project"
+                    danger
+                  >
+                    <IconTrash size={13} />
+                  </IconButton>
                 </div>
               )}
             </div>
-          );
-        })}
+          </div>
+        ))}
 
         {projects.length === 0 && (
           <div

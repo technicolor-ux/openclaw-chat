@@ -1,5 +1,6 @@
 #![allow(dead_code, unused_imports)]
 mod db;
+mod obsidian;
 mod openclaw;
 mod proactive;
 mod ssh;
@@ -390,6 +391,75 @@ async fn cmd_get_remote_mode(state: State<'_, AppState>) -> Result<bool, String>
     Ok(*state.remote_mode.lock().unwrap())
 }
 
+// ── Settings & Obsidian commands ─────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct SyncResult {
+    created: u32,
+    updated: u32,
+    skipped: u32,
+    errors: Vec<String>,
+}
+
+#[tauri::command]
+async fn cmd_get_setting(state: State<'_, AppState>, key: String) -> Result<Option<String>, String> {
+    let conn = state.db.lock().unwrap();
+    db::get_setting(&conn, &key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn cmd_set_setting(state: State<'_, AppState>, key: String, value: String) -> Result<(), String> {
+    let conn = state.db.lock().unwrap();
+    db::set_setting(&conn, &key, &value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn cmd_sync_obsidian_vault(state: State<'_, AppState>) -> Result<SyncResult, String> {
+    let vault_path = {
+        let conn = state.db.lock().unwrap();
+        db::get_setting(&conn, "obsidian_vault_path").map_err(|e| e.to_string())?
+    };
+
+    let Some(vault_path) = vault_path else {
+        return Err("No vault path configured".to_string());
+    };
+
+    let active_path = std::path::PathBuf::from(&vault_path)
+        .join("10 Projects")
+        .join("Active");
+    if !active_path.is_dir() {
+        return Err(format!(
+            "Active projects directory not found: {}",
+            active_path.display()
+        ));
+    }
+
+    let projects = obsidian::parse_vault(&active_path);
+
+    let conn = state.db.lock().unwrap();
+    let mut result = SyncResult {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: Vec::new(),
+    };
+    for p in &projects {
+        match db::upsert_obsidian_project(
+            &conn,
+            &p.name,
+            p.description.as_deref(),
+            &p.color,
+            &p.obsidian_source,
+        ) {
+            Ok(db::UpsertResult::Created) => result.created += 1,
+            Ok(db::UpsertResult::Updated) => result.updated += 1,
+            Ok(db::UpsertResult::Skipped) => result.skipped += 1,
+            Err(e) => result.errors.push(format!("{}: {}", p.name, e)),
+        }
+    }
+    Ok(result)
+}
+
 // ── App entry point ───────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -434,6 +504,9 @@ pub fn run() {
             cmd_ssh_status,
             cmd_set_remote_mode,
             cmd_get_remote_mode,
+            cmd_get_setting,
+            cmd_set_setting,
+            cmd_sync_obsidian_vault,
         ])
         .setup(|app| {
             // Start proactive loop in background
@@ -445,6 +518,38 @@ pub fn run() {
             let app_handle2 = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 proactive::run_title_refresh_loop(app_handle2).await;
+            });
+            // Background Obsidian vault sync (2s delay)
+            let db_clone = Arc::clone(&app.state::<AppState>().db);
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                let vault_path = {
+                    let conn = db_clone.lock().unwrap();
+                    db::get_setting(&conn, "obsidian_vault_path")
+                        .ok()
+                        .flatten()
+                };
+                if let Some(vault_path) = vault_path {
+                    let active_path = std::path::PathBuf::from(&vault_path)
+                        .join("10 Projects")
+                        .join("Active");
+                    if active_path.is_dir() {
+                        let projects = obsidian::parse_vault(&active_path);
+                        let conn = db_clone.lock().unwrap();
+                        for p in &projects {
+                            if let Err(e) = db::upsert_obsidian_project(
+                                &conn,
+                                &p.name,
+                                p.description.as_deref(),
+                                &p.color,
+                                &p.obsidian_source,
+                            ) {
+                                eprintln!("Obsidian sync error for {}: {}", p.name, e);
+                            }
+                        }
+                        eprintln!("Obsidian startup sync: {} projects processed", projects.len());
+                    }
+                }
             });
             Ok(())
         })

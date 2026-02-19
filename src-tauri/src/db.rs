@@ -105,6 +105,28 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         conn.execute_batch("ALTER TABLE threads ADD COLUMN title_updated_at INTEGER")?;
     }
 
+    // Migration: settings table
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )",
+    )?;
+
+    // Migration: add obsidian_source column to projects
+    let has_obsidian: bool = conn
+        .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'")?
+        .query_row([], |row| row.get::<_, String>(0))
+        .map(|sql| sql.contains("obsidian_source"))
+        .unwrap_or(false);
+    if !has_obsidian {
+        conn.execute_batch("ALTER TABLE projects ADD COLUMN obsidian_source TEXT")?;
+        conn.execute_batch(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_obsidian_source
+             ON projects(obsidian_source) WHERE obsidian_source IS NOT NULL",
+        )?;
+    }
+
     Ok(())
 }
 
@@ -377,4 +399,85 @@ pub fn set_brain_dump_proactive(conn: &Connection, id: &str, proactive: bool) ->
 pub fn delete_brain_dump(conn: &Connection, id: &str) -> Result<()> {
     conn.execute("DELETE FROM brain_dumps WHERE id=?1", params![id])?;
     Ok(())
+}
+
+// Settings
+
+pub fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
+    let mut stmt = conn.prepare("SELECT value FROM settings WHERE key=?1")?;
+    let mut rows = stmt.query_map(params![key], |row| row.get::<_, String>(0))?;
+    Ok(rows.next().transpose()?)
+}
+
+pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        params![key, value],
+    )?;
+    Ok(())
+}
+
+// Obsidian sync
+
+pub enum UpsertResult {
+    Created,
+    Updated,
+    Skipped,
+}
+
+pub fn upsert_obsidian_project(
+    conn: &Connection,
+    name: &str,
+    description: Option<&str>,
+    color: &str,
+    obsidian_source: &str,
+) -> Result<UpsertResult> {
+    let now = chrono::Utc::now().timestamp_millis();
+
+    // Check if project with this obsidian_source already exists
+    let existing: Option<(String, String, Option<String>, Option<String>)> = conn
+        .prepare("SELECT id, name, description, color FROM projects WHERE obsidian_source=?1")?
+        .query_row(params![obsidian_source], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .ok();
+
+    if let Some((id, old_name, old_desc, old_color)) = existing {
+        // Check if anything changed
+        if old_name == name
+            && old_desc.as_deref() == description
+            && old_color.as_deref() == Some(color)
+        {
+            return Ok(UpsertResult::Skipped);
+        }
+        conn.execute(
+            "UPDATE projects SET name=?1, description=?2, color=?3, updated_at=?4 WHERE id=?5",
+            params![name, description, color, now, id],
+        )?;
+        return Ok(UpsertResult::Updated);
+    }
+
+    // First sync: try to claim an existing project by name (no obsidian_source yet)
+    let claimed: Option<String> = conn
+        .prepare("SELECT id FROM projects WHERE name=?1 AND obsidian_source IS NULL")?
+        .query_row(params![name], |row| row.get(0))
+        .ok();
+
+    if let Some(id) = claimed {
+        conn.execute(
+            "UPDATE projects SET description=?1, color=?2, obsidian_source=?3, updated_at=?4 WHERE id=?5",
+            params![description, color, obsidian_source, now, id],
+        )?;
+        return Ok(UpsertResult::Updated);
+    }
+
+    // Create new
+    let id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO projects (id, name, description, color, agent_id, obsidian_source, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 'main', ?5, ?6, ?6)",
+        params![id, name, description, color, obsidian_source, now],
+    )?;
+    Ok(UpsertResult::Created)
 }

@@ -107,6 +107,21 @@ export const setRemoteMode = (enabled: boolean) =>
   invoke<void>("cmd_set_remote_mode", { enabled });
 export const getRemoteMode = () => invoke<boolean>("cmd_get_remote_mode");
 
+// Settings
+export const getSetting = (key: string) =>
+  invoke<string | null>("cmd_get_setting", { key });
+export const setSetting = (key: string, value: string) =>
+  invoke<void>("cmd_set_setting", { key, value });
+
+// Obsidian sync
+export interface SyncResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}
+export const syncObsidianVault = () => invoke<SyncResult>("cmd_sync_obsidian_vault");
+
 // Events
 export const onChatMessage = (cb: (event: MessageEvent) => void) =>
   listen<MessageEvent>("chat:message", (e) => cb(e.payload));
