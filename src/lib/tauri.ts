@@ -33,6 +33,20 @@ export interface BrainDump {
   followed_up_at?: number;
 }
 
+export interface KanbanItem {
+  id: string;
+  project_id?: string;
+  source_type: "manual" | "brain_dump" | "research";
+  source_id?: string;
+  title: string;
+  description?: string;
+  column: "backlog" | "this_week" | "in_progress" | "done";
+  position: number;
+  status: "active" | "archived";
+  created_at: number;
+  updated_at: number;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -138,3 +152,25 @@ export const onBrainDumpFollowedUp = (
     project_id?: string;
   }) => void
 ) => listen("braindump:followed_up", (e: any) => cb(e.payload));
+
+// Kanban
+export const listKanbanItems = (projectId?: string) =>
+  invoke<KanbanItem[]>("cmd_list_kanban_items", { projectId });
+export const createKanbanItem = (
+  title: string,
+  projectId?: string,
+  description?: string,
+  column?: string
+) => invoke<KanbanItem>("cmd_create_kanban_item", { title, projectId, description, column });
+export const updateKanbanItem = (
+  id: string,
+  title?: string,
+  description?: string,
+  column?: string,
+  position?: number,
+  status?: string
+) => invoke<void>("cmd_update_kanban_item", { id, title, description, column, position, status });
+export const deleteKanbanItem = (id: string) =>
+  invoke<void>("cmd_delete_kanban_item", { id });
+export const promoteBrainDump = (dumpId: string, title: string, projectId?: string, column?: string) =>
+  invoke<KanbanItem>("cmd_promote_brain_dump", { dumpId, title, projectId, column });

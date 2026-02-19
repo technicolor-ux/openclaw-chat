@@ -38,6 +38,21 @@ pub struct BrainDump {
     pub followed_up_at: Option<i64>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct KanbanItem {
+    pub id: String,
+    pub project_id: Option<String>,
+    pub source_type: String, // 'manual' | 'brain_dump' | 'research'
+    pub source_id: Option<String>,
+    pub title: String,
+    pub description: Option<String>,
+    pub column: String, // 'backlog' | 'this_week' | 'in_progress' | 'done'
+    pub position: i32,
+    pub status: String, // 'active' | 'archived'
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 pub fn db_path() -> PathBuf {
     let home = dirs::home_dir().unwrap_or_default();
     home.join(".openclaw").join("chat").join("openclaw-chat.db")
@@ -88,10 +103,26 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             followed_up_at INTEGER
         );
 
+        CREATE TABLE IF NOT EXISTS kanban_items (
+            id TEXT PRIMARY KEY,
+            project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+            source_type TEXT NOT NULL DEFAULT 'manual',
+            source_id TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            column TEXT NOT NULL DEFAULT 'backlog',
+            position INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_threads_project ON threads(project_id);
         CREATE INDEX IF NOT EXISTS idx_threads_session ON threads(session_id);
         CREATE INDEX IF NOT EXISTS idx_brain_dumps_status ON brain_dumps(status);
         CREATE INDEX IF NOT EXISTS idx_brain_dumps_proactive ON brain_dumps(proactive);
+        CREATE INDEX IF NOT EXISTS idx_kanban_project ON kanban_items(project_id);
+        CREATE INDEX IF NOT EXISTS idx_kanban_column ON kanban_items(column);
         ",
     )?;
 
@@ -480,4 +511,128 @@ pub fn upsert_obsidian_project(
         params![id, name, description, color, obsidian_source, now],
     )?;
     Ok(UpsertResult::Created)
+}
+
+// Kanban items
+
+pub fn create_kanban_item(conn: &Connection, item: &KanbanItem) -> Result<()> {
+    conn.execute(
+        "INSERT INTO kanban_items (id, project_id, source_type, source_id, title, description, column, position, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![
+            item.id,
+            item.project_id,
+            item.source_type,
+            item.source_id,
+            item.title,
+            item.description,
+            item.column,
+            item.position,
+            item.status,
+            item.created_at,
+            item.updated_at,
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn list_kanban_items(conn: &Connection, project_id: Option<&str>) -> Result<Vec<KanbanItem>> {
+    let query = if let Some(_pid) = project_id {
+        "SELECT id, project_id, source_type, source_id, title, description, column, position, status, created_at, updated_at
+         FROM kanban_items WHERE project_id=?1 AND status='active' ORDER BY column, position"
+    } else {
+        "SELECT id, project_id, source_type, source_id, title, description, column, position, status, created_at, updated_at
+         FROM kanban_items WHERE status='active' ORDER BY column, position"
+    };
+
+    let mut stmt = conn.prepare(query)?;
+    let rows = if let Some(pid) = project_id {
+        stmt.query_map(params![pid], row_to_kanban_item)?
+    } else {
+        stmt.query_map([], row_to_kanban_item)?
+    };
+
+    let mut items = Vec::new();
+    for row in rows {
+        items.push(row?);
+    }
+    Ok(items)
+}
+
+fn row_to_kanban_item(row: &rusqlite::Row) -> rusqlite::Result<KanbanItem> {
+    Ok(KanbanItem {
+        id: row.get(0)?,
+        project_id: row.get(1)?,
+        source_type: row.get(2)?,
+        source_id: row.get(3)?,
+        title: row.get(4)?,
+        description: row.get(5)?,
+        column: row.get(6)?,
+        position: row.get(7)?,
+        status: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
+    })
+}
+
+pub fn update_kanban_item(
+    conn: &Connection,
+    id: &str,
+    title: Option<&str>,
+    description: Option<&str>,
+    column: Option<&str>,
+    position: Option<i32>,
+    status: Option<&str>,
+) -> Result<()> {
+    let now = chrono::Utc::now().timestamp_millis();
+
+    // Build dynamic UPDATE query
+    let mut updates = vec!["updated_at=?1".to_string()];
+    let mut param_count = 2;
+
+    let mut final_params: Vec<String> = vec![now.to_string()];
+
+    if let Some(t) = title {
+        updates.push(format!("title=?{}", param_count));
+        final_params.push(t.to_string());
+        param_count += 1;
+    }
+    if let Some(d) = description {
+        updates.push(format!("description=?{}", param_count));
+        final_params.push(d.to_string());
+        param_count += 1;
+    }
+    if let Some(c) = column {
+        updates.push(format!("column=?{}", param_count));
+        final_params.push(c.to_string());
+        param_count += 1;
+    }
+    if let Some(p) = position {
+        updates.push(format!("position=?{}", param_count));
+        final_params.push(p.to_string());
+        param_count += 1;
+    }
+    if let Some(s) = status {
+        updates.push(format!("status=?{}", param_count));
+        final_params.push(s.to_string());
+        param_count += 1;
+    }
+
+    let query = format!(
+        "UPDATE kanban_items SET {} WHERE id=?{}",
+        updates.join(", "),
+        param_count
+    );
+    final_params.push(id.to_string());
+
+    let mut stmt = conn.prepare(&query)?;
+    let params_refs: Vec<&dyn rusqlite::ToSql> = final_params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
+    stmt.execute(params_refs.as_slice())?;
+
+    Ok(())
+}
+
+pub fn delete_kanban_item(conn: &Connection, id: &str) -> Result<()> {
+    conn.execute("DELETE FROM kanban_items WHERE id=?1", params![id])?;
+    Ok(())
 }

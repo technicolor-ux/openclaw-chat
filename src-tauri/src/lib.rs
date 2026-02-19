@@ -1,5 +1,6 @@
 #![allow(dead_code, unused_imports)]
 mod db;
+mod kanban;
 mod obsidian;
 mod openclaw;
 mod proactive;
@@ -340,6 +341,64 @@ async fn cmd_convert_dump_to_thread(
     Ok(thread)
 }
 
+// ── Kanban commands ───────────────────────────────────────────────────────────
+
+#[tauri::command]
+async fn cmd_list_kanban_items(
+    state: State<'_, AppState>,
+    project_id: Option<String>,
+) -> Result<Vec<db::KanbanItem>, String> {
+    let conn = state.db.lock().unwrap();
+    kanban::list_kanban_items(&conn, project_id.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn cmd_create_kanban_item(
+    state: State<'_, AppState>,
+    title: String,
+    project_id: Option<String>,
+    description: Option<String>,
+    column: Option<String>,
+) -> Result<db::KanbanItem, String> {
+    let conn = state.db.lock().unwrap();
+    kanban::create_kanban_item(&conn, title, project_id, description, column)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn cmd_update_kanban_item(
+    state: State<'_, AppState>,
+    id: String,
+    title: Option<String>,
+    description: Option<String>,
+    column: Option<String>,
+    position: Option<i32>,
+    status: Option<String>,
+) -> Result<(), String> {
+    let conn = state.db.lock().unwrap();
+    kanban::update_kanban_item(&conn, id, title, description, column, position, status)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn cmd_delete_kanban_item(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let conn = state.db.lock().unwrap();
+    kanban::delete_kanban_item(&conn, id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn cmd_promote_brain_dump(
+    state: State<'_, AppState>,
+    dump_id: String,
+    title: String,
+    project_id: Option<String>,
+    column: Option<String>,
+) -> Result<db::KanbanItem, String> {
+    let conn = state.db.lock().unwrap();
+    kanban::promote_brain_dump(&conn, dump_id, title, project_id, column)
+        .map_err(|e| e.to_string())
+}
+
 // ── SSH commands ──────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -498,6 +557,11 @@ pub fn run() {
             cmd_set_brain_dump_proactive,
             cmd_delete_brain_dump,
             cmd_convert_dump_to_thread,
+            cmd_list_kanban_items,
+            cmd_create_kanban_item,
+            cmd_update_kanban_item,
+            cmd_delete_kanban_item,
+            cmd_promote_brain_dump,
             cmd_configure_ssh,
             cmd_get_ssh_config,
             cmd_test_ssh,
