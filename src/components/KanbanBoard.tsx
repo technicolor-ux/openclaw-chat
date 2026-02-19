@@ -9,7 +9,7 @@ import KanbanColumn from "./KanbanColumn";
 import CardPopupModal from "./CardPopupModal";
 
 interface Props {
-  projectFilter: string | null;
+  projectFilters: string[];
   projects: Project[];
   onOpenThread: (thread: Thread) => void;
 }
@@ -21,18 +21,26 @@ const COLUMNS = [
   { id: "done", label: "Done" },
 ] as const;
 
-export default function KanbanBoard({ projectFilter, projects, onOpenThread }: Props) {
+export default function KanbanBoard({ projectFilters, projects, onOpenThread }: Props) {
   const [items, setItems] = useState<KanbanItem[]>([]);
   const [selectedCard, setSelectedCard] = useState<KanbanItem | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const allItems = await listKanbanItems(projectFilter || undefined);
-      setItems(allItems);
+      const allItems = await listKanbanItems(undefined);
+      // Filter items based on selected project filters
+      if (projectFilters.length > 0) {
+        const filtered = allItems.filter((item) =>
+          projectFilters.includes(item.project_id || "")
+        );
+        setItems(filtered);
+      } else {
+        setItems(allItems);
+      }
     } catch (err) {
       console.error("Failed to load kanban items:", err);
     }
-  }, [projectFilter]);
+  }, [projectFilters]);
 
   useEffect(() => {
     refresh();

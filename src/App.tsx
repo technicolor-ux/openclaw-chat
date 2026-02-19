@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { IconSun, IconMoon, IconSettings, IconAdjustmentsHorizontal, IconBrain, IconListCheck } from "@tabler/icons-react";
+import { IconSun, IconMoon, IconSettings, IconAdjustmentsHorizontal, IconBrain } from "@tabler/icons-react";
 import Sidebar from "./components/Sidebar";
 import BrainDump from "./components/BrainDump";
 import ChatView from "./components/ChatView";
@@ -31,6 +31,7 @@ export default function App() {
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [activeView, setActiveView] = useState<"chat" | "board">("chat");
+  const [selectedProjectFilters, setSelectedProjectFilters] = useState<string[]>([]);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBrainDump, setShowBrainDump] = useState(false);
@@ -178,6 +179,10 @@ export default function App() {
           onNewProject={() => setShowNewProject(true)}
           onDeleteThread={handleDeleteThread}
           onDeleteProject={handleDeleteProject}
+          activeView={activeView}
+          onViewChange={setActiveView}
+          selectedProjectFilters={selectedProjectFilters}
+          onProjectFilterChange={setSelectedProjectFilters}
         />
       </div>
 
@@ -248,50 +253,6 @@ export default function App() {
               WebkitAppRegion: "no-drag",
             }}
           >
-            {/* View tabs */}
-            <div style={{ display: "flex", gap: 2 }}>
-              <button
-                onClick={() => setActiveView("chat")}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 6,
-                  border: "1px solid var(--color-border)",
-                  background: activeView === "chat" ? "var(--color-accent)" : "transparent",
-                  color: activeView === "chat" ? "#fff" : "var(--color-text-2)",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  transition: "all 0.15s",
-                }}
-              >
-                Chat
-              </button>
-              <button
-                onClick={() => setActiveView("board")}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 6,
-                  border: "1px solid var(--color-border)",
-                  background: activeView === "board" ? "var(--color-accent)" : "transparent",
-                  color: activeView === "board" ? "#fff" : "var(--color-text-2)",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  transition: "all 0.15s",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                <IconListCheck size={14} />
-                Board
-              </button>
-            </div>
-
-            {/* Spacer */}
-            <div style={{ flex: 1 }} />
 
             <HeaderButton
               onClick={() => setShowBrainDump((b) => !b)}
@@ -336,7 +297,7 @@ export default function App() {
         {/* Main content */}
         {activeView === "board" ? (
           <KanbanBoard
-            projectFilter={null}
+            projectFilters={selectedProjectFilters}
             projects={projects}
             onOpenThread={(thread) => {
               handleSelectThread(thread);

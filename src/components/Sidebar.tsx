@@ -18,6 +18,10 @@ interface Props {
   onNewProject: () => void;
   onDeleteThread: (thread: Thread) => void;
   onDeleteProject: (project: Project) => void;
+  activeView: "chat" | "board";
+  onViewChange: (view: "chat" | "board") => void;
+  selectedProjectFilters?: string[];
+  onProjectFilterChange?: (projectIds: string[]) => void;
 }
 
 export default function Sidebar({
@@ -32,6 +36,10 @@ export default function Sidebar({
   onNewProject,
   onDeleteThread,
   onDeleteProject,
+  activeView,
+  onViewChange,
+  selectedProjectFilters = [],
+  onProjectFilterChange = () => {},
 }: Props) {
   const [hoveredThread, setHoveredThread] = useState<string | null>(null);
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
@@ -51,39 +59,164 @@ export default function Sidebar({
       {/* Traffic light spacer (macOS overlay titlebar) */}
       <div data-tauri-drag-region className="traffic-light-spacer" />
 
-      {/* New Thread button */}
-      <div style={{ padding: "0 10px 8px" }}>
-        <button
-          onClick={() => onNewThread()}
+      {/* Chat/Board toggle pill */}
+      <div style={{ padding: "8px 10px" }}>
+        <div
           style={{
-            width: "100%",
-            padding: "7px 12px",
-            borderRadius: 8,
-            border: "1px solid var(--color-border)",
-            background: "var(--color-surface-3)",
-            color: "var(--color-text)",
-            fontSize: 13,
-            cursor: "pointer",
             display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontWeight: 500,
+            background: "var(--color-surface-3)",
+            borderRadius: 20,
+            border: "1px solid var(--color-border)",
+            padding: "4px",
+            gap: 4,
           }}
         >
-          <IconPlus size={15} />
-          New Thread
-        </button>
+          <button
+            onClick={() => onViewChange("chat")}
+            style={{
+              flex: 1,
+              padding: "6px 12px",
+              borderRadius: 16,
+              border: "none",
+              background: activeView === "chat" ? "var(--color-accent)" : "transparent",
+              color: activeView === "chat" ? "#fff" : "var(--color-text-2)",
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 0.2s",
+              fontFamily: "inherit",
+            }}
+          >
+            Chat
+          </button>
+          <button
+            onClick={() => onViewChange("board")}
+            style={{
+              flex: 1,
+              padding: "6px 12px",
+              borderRadius: 16,
+              border: "none",
+              background: activeView === "board" ? "var(--color-accent)" : "transparent",
+              color: activeView === "board" ? "#fff" : "var(--color-text-2)",
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 0.2s",
+              fontFamily: "inherit",
+            }}
+          >
+            Board
+          </button>
+        </div>
       </div>
 
-      {/* Projects section */}
-      <SectionHeader
-        label="Projects"
-        onAdd={onNewProject}
-        addTitle="New project"
-      />
+      {/* New Thread button (chat mode only) */}
+      {activeView === "chat" && (
+        <div style={{ padding: "0 10px 8px" }}>
+          <button
+            onClick={() => onNewThread()}
+            style={{
+              width: "100%",
+              padding: "7px 12px",
+              borderRadius: 8,
+              border: "1px solid var(--color-border)",
+              background: "var(--color-surface-3)",
+              color: "var(--color-text)",
+              fontSize: 13,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontWeight: 500,
+            }}
+          >
+            <IconPlus size={15} />
+            New Thread
+          </button>
+        </div>
+      )}
 
-      <div style={{ flex: 1 }}>
-        {projects.map((project) => (
+      {/* Board Filters section (board view only) */}
+      {activeView === "board" && (
+        <>
+          <SectionHeader label="Filters" />
+          <div style={{ padding: "0 10px 12px" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {/* "All" pill */}
+              <button
+                onClick={() => onProjectFilterChange([])}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 16,
+                  border: "1px solid var(--color-border)",
+                  background:
+                    selectedProjectFilters.length === 0
+                      ? "var(--color-accent)"
+                      : "transparent",
+                  color:
+                    selectedProjectFilters.length === 0
+                      ? "#fff"
+                      : "var(--color-text-2)",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  fontFamily: "inherit",
+                }}
+              >
+                All
+              </button>
+              {/* Project filter pills */}
+              {projects.map((project) => {
+                const isSelected = selectedProjectFilters.includes(project.id);
+                return (
+                  <button
+                    key={project.id}
+                    onClick={() => {
+                      const newFilters = isSelected
+                        ? selectedProjectFilters.filter((id) => id !== project.id)
+                        : [...selectedProjectFilters, project.id];
+                      onProjectFilterChange(newFilters);
+                    }}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 16,
+                      border: `1px solid ${project.color || "var(--color-border)"}`,
+                      background: isSelected
+                        ? project.color || "var(--color-accent)"
+                        : "transparent",
+                      color: isSelected ? "#fff" : "var(--color-text-2)",
+                      fontSize: 11,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      transition: "all 0.15s",
+                      fontFamily: "inherit",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {project.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Projects section (chat view only) */}
+      {activeView === "chat" && (
+        <>
+          <SectionHeader
+            label="Projects"
+            onAdd={onNewProject}
+            addTitle="New project"
+          />
+        </>
+      )}
+
+      {activeView === "chat" && (
+        <div style={{ flex: 1 }}>
+          {projects.map((project) => (
           <div key={project.id}>
             {/* Project row */}
             <div
@@ -203,8 +336,8 @@ export default function Sidebar({
             No standalone threads.
           </div>
         )}
-      </div>
-
+        </div>
+      )}
     </div>
   );
 }
