@@ -133,12 +133,17 @@ pub fn append_message(agent_id: &str, session_id: &str, msg: &ChatMessage) -> Re
 pub async fn send_and_capture(agent_id: &str, message: &str) -> Result<String> {
     let openclaw_bin = find_openclaw_binary()?;
 
+    let db_path = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".openclaw/chat/openclaw-chat.db");
+
     let output = tokio::process::Command::new(&openclaw_bin)
         .args([
             "agent", "--local", "--agent", agent_id,
             "--message", message, "--json",
         ])
         .env("PATH", OPENCLAW_PATH_ENV)
+        .env("OPENCLAW_CHAT_DB", db_path.to_string_lossy().as_ref())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?

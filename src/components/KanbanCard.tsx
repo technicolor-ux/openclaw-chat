@@ -68,6 +68,7 @@ export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props
         color: "var(--color-text)",
         position: "relative",
         minHeight: 80,
+        flexShrink: 0,
         display: "flex",
         flexDirection: "column",
       }}
@@ -98,38 +99,40 @@ export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props
         <IconDots size={16} />
       </div>
 
-      {/* Title - max 3 lines */}
+      {/* Title - max 2 lines, truncated with ellipsis */}
       <div
         style={{
           fontWeight: 600,
           fontSize: 13,
           color: "var(--color-text)",
           marginBottom: 8,
-          lineHeight: 1.3,
+          lineHeight: "17px",
+          maxHeight: 34,
           overflow: "hidden",
-          display: "-webkit-box",
-          WebkitLineClamp: 3,
-          WebkitBoxOrient: "vertical",
-        } as any}
+          wordBreak: "break-word",
+        }}
       >
-        {item.title}
+        {item.title && item.title.length > 60
+          ? item.title.slice(0, 60).trimEnd() + "…"
+          : item.title}
       </div>
 
-      {/* Description preview - max 3 lines */}
+      {/* Description preview - max 2 lines, truncated with ellipsis */}
       {item.description && (
         <div
           style={{
             fontSize: 12,
             color: "var(--color-text-2)",
             marginBottom: 8,
-            lineHeight: 1.4,
+            lineHeight: "17px",
+            maxHeight: 34,
             overflow: "hidden",
-            display: "-webkit-box",
-            WebkitLineClamp: 3,
-            WebkitBoxOrient: "vertical",
-          } as any}
+            wordBreak: "break-word",
+          }}
         >
-          {item.description}
+          {item.description.length > 80
+            ? item.description.slice(0, 80).trimEnd() + "…"
+            : item.description}
         </div>
       )}
 

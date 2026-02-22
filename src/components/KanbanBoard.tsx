@@ -4,7 +4,7 @@ import {
   DragEndEvent,
   closestCorners,
 } from "@dnd-kit/core";
-import { listKanbanItems, updateKanbanItem, type KanbanItem, type Thread, type Project } from "../lib/tauri";
+import { listKanbanItems, updateKanbanItem, onKanbanRefresh, type KanbanItem, type Thread, type Project } from "../lib/tauri";
 import KanbanColumn from "./KanbanColumn";
 import CardPopupModal from "./CardPopupModal";
 
@@ -44,6 +44,11 @@ export default function KanbanBoard({ projectFilters, projects, onOpenThread }: 
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const unlisten = onKanbanRefresh(() => refresh());
+    return () => { unlisten.then((fn) => fn()); };
   }, [refresh]);
 
   const handleDragEnd = async (event: DragEndEvent) => {

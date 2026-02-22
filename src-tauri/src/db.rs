@@ -217,6 +217,25 @@ pub fn delete_project(conn: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn get_project(conn: &Connection, id: &str) -> Result<Option<Project>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, description, color, agent_id, created_at, updated_at
+         FROM projects WHERE id=?1",
+    )?;
+    let mut rows = stmt.query_map(params![id], |row| {
+        Ok(Project {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            description: row.get(2)?,
+            color: row.get(3)?,
+            agent_id: row.get(4)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
+        })
+    })?;
+    Ok(rows.next().transpose()?)
+}
+
 // Threads CRUD
 
 pub fn create_thread(conn: &Connection, thread: &Thread) -> Result<()> {

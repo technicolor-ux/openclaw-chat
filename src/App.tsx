@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { IconSun, IconMoon, IconSettings, IconAdjustmentsHorizontal, IconBrain } from "@tabler/icons-react";
 import Sidebar from "./components/Sidebar";
 import BrainDump from "./components/BrainDump";
@@ -146,6 +147,12 @@ export default function App() {
   const ThemeIcon =
     mode === "light" ? IconSun : mode === "dark" ? IconMoon : IconAdjustmentsHorizontal;
 
+  const handleWindowDrag = (e: React.MouseEvent) => {
+    if (e.buttons === 1) {
+      getCurrentWebviewWindow().startDragging();
+    }
+  };
+
   return (
     <div
       style={{
@@ -219,6 +226,7 @@ export default function App() {
         {/* Header bar */}
         <div
           data-tauri-drag-region
+          onMouseDown={handleWindowDrag}
           style={{
             height: 52,
             display: "flex",

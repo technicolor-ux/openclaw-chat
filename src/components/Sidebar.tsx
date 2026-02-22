@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   IconPlus,
   IconMessage,
@@ -57,7 +58,13 @@ export default function Sidebar({
       }}
     >
       {/* Traffic light spacer (macOS overlay titlebar) */}
-      <div data-tauri-drag-region className="traffic-light-spacer" />
+      <div
+        data-tauri-drag-region
+        className="traffic-light-spacer"
+        onMouseDown={(e) => {
+          if (e.buttons === 1) getCurrentWebviewWindow().startDragging();
+        }}
+      />
 
       {/* Chat/Board toggle pill */}
       <div style={{ padding: "8px 10px" }}>

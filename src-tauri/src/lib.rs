@@ -180,7 +180,29 @@ async fn cmd_send_message(
         return Ok(());
     }
 
-    // Write user message to our JSONL file immediately
+    // Build augmented message with project context if thread belongs to a project
+    let augmented_message = {
+        let conn = state.db.lock().unwrap();
+        let thread = get_thread(&conn, &thread_id).ok().flatten();
+        if let Some(ref t) = thread {
+            if let Some(ref pid) = t.project_id {
+                if let Some(project) = get_project(&conn, pid).ok().flatten() {
+                    format!(
+                        "[System context: You are in project \"{}\" (id: {}). You can create kanban cards using the kanban-card command. Always use this project id when creating cards.]\n\n{}",
+                        project.name, project.id, message
+                    )
+                } else {
+                    message.clone()
+                }
+            } else {
+                message.clone()
+            }
+        } else {
+            message.clone()
+        }
+    };
+
+    // Write user message to our JSONL file immediately (original, no context prefix)
     let user_msg = openclaw::ChatMessage {
         role: "user".to_string(),
         content: message.clone(),
@@ -188,8 +210,8 @@ async fn cmd_send_message(
     openclaw::append_message(&agent_id, &session_id, &user_msg)
         .map_err(|e| format!("Failed to write user message: {}", e))?;
 
-    // Send to openclaw and capture stdout response
-    let response_text = openclaw::send_and_capture(&agent_id, &message)
+    // Send augmented message to openclaw and capture stdout response
+    let response_text = openclaw::send_and_capture(&agent_id, &augmented_message)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -209,6 +231,9 @@ async fn cmd_send_message(
             message: assistant_msg,
         },
     );
+
+    // Notify kanban board to refresh (agent may have created cards)
+    let _ = app.emit("kanban:refresh", ());
 
     // Auto-title: if thread name is "New thread", generate a title from the user message
     let should_title = {
@@ -374,9 +399,10 @@ async fn cmd_update_kanban_item(
     column: Option<String>,
     position: Option<i32>,
     status: Option<String>,
+    project_id: Option<String>,
 ) -> Result<(), String> {
     let conn = state.db.lock().unwrap();
-    kanban::update_kanban_item(&conn, id, title, description, column, position, status)
+    kanban::update_kanban_item(&conn, id, title, description, column, position, status, project_id)
         .map_err(|e| e.to_string())
 }
 

@@ -153,6 +153,9 @@ export const onBrainDumpFollowedUp = (
   }) => void
 ) => listen("braindump:followed_up", (e: any) => cb(e.payload));
 
+export const onKanbanRefresh = (cb: () => void) =>
+  listen("kanban:refresh", () => cb());
+
 // Kanban
 export const listKanbanItems = (projectId?: string) =>
   invoke<KanbanItem[]>("cmd_list_kanban_items", { projectId });
@@ -168,8 +171,9 @@ export const updateKanbanItem = (
   description?: string,
   column?: string,
   position?: number,
-  status?: string
-) => invoke<void>("cmd_update_kanban_item", { id, title, description, column, position, status });
+  status?: string,
+  projectId?: string | null
+) => invoke<void>("cmd_update_kanban_item", { id, title, description, column, position, status, projectId });
 export const deleteKanbanItem = (id: string) =>
   invoke<void>("cmd_delete_kanban_item", { id });
 export const promoteBrainDump = (dumpId: string, title: string, projectId?: string, column?: string) =>
