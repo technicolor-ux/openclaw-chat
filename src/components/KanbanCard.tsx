@@ -37,7 +37,7 @@ export default function KanbanCard({ item, projects, onSelect, onUpdate }: Props
 
   const handleProjectChange = async (newProjectId: string | undefined) => {
     try {
-      await updateKanbanItem(item.id, undefined, undefined, undefined, undefined, undefined, newProjectId);
+      await updateKanbanItem(item.id, undefined, undefined, undefined, undefined, undefined, newProjectId ?? "");
       const updatedItem = { ...item, project_id: newProjectId };
       onUpdate?.(updatedItem);
       setShowProjectSelector(false);

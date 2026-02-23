@@ -44,17 +44,20 @@ pub fn update_kanban_item(
     // For now, we need to update project_id manually since db::update_kanban_item doesn't support it yet
     // We'll need to enhance the db layer to support updating project_id
     if let Some(proj_id) = project_id {
-        conn.execute(
-            "UPDATE kanban_items SET project_id = ?1, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![proj_id, Utc::now().timestamp_millis(), id],
-        )?;
-    } else if project_id.is_none() {
-        // Only set to NULL if explicitly passed None
-        conn.execute(
-            "UPDATE kanban_items SET project_id = NULL, updated_at = ?1 WHERE id = ?2",
-            rusqlite::params![Utc::now().timestamp_millis(), id],
-        )?;
+        if proj_id.is_empty() {
+            // Empty string = explicit "unassign project"
+            conn.execute(
+                "UPDATE kanban_items SET project_id = NULL, updated_at = ?1 WHERE id = ?2",
+                rusqlite::params![Utc::now().timestamp_millis(), id],
+            )?;
+        } else {
+            conn.execute(
+                "UPDATE kanban_items SET project_id = ?1, updated_at = ?2 WHERE id = ?3",
+                rusqlite::params![proj_id, Utc::now().timestamp_millis(), id],
+            )?;
+        }
     }
+    // None = no-op: project_id unchanged (e.g. column drag-and-drop)
 
     // Update other fields if provided
     db::update_kanban_item(
